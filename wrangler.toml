@@ -13,6 +13,7 @@ enabled = true
 binding = "DB"
 database_name = "parable-db"
 database_id = "local"  # replaced after `wrangler d1 create`
+migrations_dir = "src/db/migrations"
 
 [vars]
 ENVIRONMENT = "development"
