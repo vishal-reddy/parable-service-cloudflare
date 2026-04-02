@@ -1,0 +1,49 @@
+{
+  "name": "parable-service-cloudflare",
+  "version": "1.0.0",
+  "description": "Cloudflare Workers alternative to parable-service — Hono.js + D1",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ test/",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply parable-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply parable-db --remote",
+    "db:studio": "drizzle-kit studio",
+    "css:build": "npx @tailwindcss/cli -i ./input.css -o ./public/css/output.css --minify",
+    "css:watch": "npx @tailwindcss/cli -i ./input.css -o ./public/css/output.css --watch",
+    "precommit": "npm run typecheck && npm run lint && npm run test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vishal-reddy/parable-service-cloudflare.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/vishal-reddy/parable-service-cloudflare/issues"
+  },
+  "homepage": "https://github.com/vishal-reddy/parable-service-cloudflare#readme",
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.10",
+    "jose": "^6.2.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.14.1",
+    "@cloudflare/workers-types": "^4.20260402.1",
+    "@tailwindcss/cli": "^4.2.2",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^9.39.4",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2",
+    "wrangler": "^4.80.0"
+  }
+}
