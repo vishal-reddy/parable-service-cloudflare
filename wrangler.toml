@@ -12,7 +12,7 @@ enabled = true
 [[d1_databases]]
 binding = "DB"
 database_name = "parable-db"
-database_id = "local"  # replaced after `wrangler d1 create`
+database_id = "427dbb4b-072e-4fdd-bef5-57bb454fb39e"
 migrations_dir = "src/db/migrations"
 
 [vars]
