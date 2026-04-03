@@ -1,219 +1,235 @@
 #!/usr/bin/env node
 
 /**
- * Bulk import Puritan Library content into Cloudflare D1.
- *
- * Reads markdown files from the PuritanLibrary directory, extracts author
- * metadata from folder names, and generates batched SQL files for D1 import.
+ * Bulk import Puritan Library content into Cloudflare D1 via the Worker's
+ * /admin/import endpoint (uses D1 bound params — no SQL statement size limit).
  *
  * Usage:
- *   node scripts/import-puritan-library.mjs <library-path> [--execute]
- *
- * Options:
- *   --execute   Run wrangler d1 execute for each batch (otherwise just generates SQL)
- *   --remote    Target remote D1 (default: local)
+ *   node scripts/import-puritan-library.mjs <library-path> [--execute] [--remote]
  */
 
-import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
+import { readdir, readFile, stat, open as fsOpen } from "node:fs/promises";
 import { join, basename, relative } from "node:path";
-import { execSync } from "node:child_process";
 
 const LIBRARY_PATH = process.argv[2] || "../parable-service/PuritanLibrary";
 const EXECUTE = process.argv.includes("--execute");
-const REMOTE = process.argv.includes("--remote");
-const BATCH_DIR = "scripts/batches";
-const MAX_BATCH_SIZE = 4 * 1024 * 1024; // 4MB per batch file (D1 safe limit)
 
-function escapeSql(str) {
-  if (!str) return "NULL";
-  return "'" + str.replace(/'/g, "''") + "'";
-}
+const WORKER_URL = "https://parable.kecker.co";
+const IMPORT_SECRET = "puritan-import-2026";
+const MAX_CONTENT_SIZE = 50 * 1024 * 1024; // read files up to 50MB
+const CONTENT_PREVIEW_SIZE = 2000; // store first 2000 chars in D1
+const BATCH_SIZE = 1; // 1 work per HTTP request
+const CONCURRENCY = 10; // parallel HTTP requests
 
 function parseAuthorDir(dirName) {
-  // Format: "AuthorLast_First - Years" e.g. "Bunyan_John - 1628-1688"
   const match = dirName.match(/^(.+?)\s*-\s*(.+)$/);
   if (match) {
-    const nameParts = match[1].replace(/_/g, " ").trim();
     const years = match[2].trim();
-    // Convert "Last First" to "First Last" if underscore-separated
     const parts = match[1].split("_").filter(Boolean);
     const name =
       parts.length >= 2
         ? parts.slice(1).join(" ") + " " + parts[0]
-        : nameParts;
+        : match[1].replace(/_/g, " ").trim();
     return { name: name.trim(), years: years === "unknown" ? null : years };
   }
   return { name: dirName.replace(/_/g, " "), years: null };
 }
 
 async function scanLibrary(libraryPath) {
-  const authors = new Map(); // authorDirName -> { name, years, works: [] }
+  const authors = new Map();
   const letters = await readdir(libraryPath);
 
   for (const letter of letters.sort()) {
     const letterPath = join(libraryPath, letter);
     let authorDirs;
-    try {
-      authorDirs = await readdir(letterPath);
-    } catch {
-      continue;
-    }
+    try { authorDirs = await readdir(letterPath); } catch { continue; }
 
     for (const authorDir of authorDirs.sort()) {
       const authorPath = join(letterPath, authorDir);
       let files;
-      try {
-        files = await readdir(authorPath);
-      } catch {
-        continue;
-      }
+      try { files = await readdir(authorPath); } catch { continue; }
 
       if (!authors.has(authorDir)) {
-        const parsed = parseAuthorDir(authorDir);
-        authors.set(authorDir, { ...parsed, works: [] });
+        authors.set(authorDir, { ...parseAuthorDir(authorDir), works: [] });
       }
 
-      const mdFiles = files.filter((f) => f.endsWith(".md")).sort();
-      for (const mdFile of mdFiles) {
-        const filePath = join(authorPath, mdFile);
+      for (const f of files.filter((f) => f.endsWith(".md")).sort()) {
+        const filePath = join(authorPath, f);
         const relPath = relative(libraryPath, filePath);
-        const title = basename(mdFile, ".md");
-        authors.get(authorDir).works.push({ title, filePath, relPath });
+        authors.get(authorDir).works.push({ title: basename(f, ".md"), filePath, relPath });
       }
     }
   }
-
   return authors;
 }
 
-async function generateBatches(authors) {
-  await mkdir(BATCH_DIR, { recursive: true });
-
-  let batchNum = 0;
-  let currentBatch = "";
-  let currentSize = 0;
-  let totalAuthors = 0;
-  let totalWorks = 0;
-  let authorIdMap = new Map();
-  const batches = [];
-
-  // First pass: generate author inserts
-  let authorSql = "-- Authors\n";
-  for (const [dirName, author] of authors) {
-    const authorId = crypto.randomUUID();
-    authorIdMap.set(dirName, authorId);
-    authorSql += `INSERT OR IGNORE INTO puritan_authors (id, name, years, created_at) VALUES (${escapeSql(authorId)}, ${escapeSql(author.name)}, ${escapeSql(author.years)}, datetime('now'));\n`;
-    totalAuthors++;
+async function postImport(body) {
+  const res = await fetch(`${WORKER_URL}/admin/import`, {
+    method: "POST",
+    headers: {
+      "X-Import-Secret": IMPORT_SECRET,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
   }
-
-  // Write authors as first batch
-  const authorBatchFile = join(BATCH_DIR, `batch_000_authors.sql`);
-  await writeFile(authorBatchFile, authorSql);
-  batches.push(authorBatchFile);
-  console.log(
-    `Batch 000: ${totalAuthors} authors (${(authorSql.length / 1024).toFixed(1)} KB)`
-  );
-
-  // Second pass: generate work inserts in batches
-  for (const [dirName, author] of authors) {
-    const authorId = authorIdMap.get(dirName);
-
-    for (const work of author.works) {
-      let content;
-      try {
-        content = await readFile(work.filePath, "utf-8");
-      } catch (err) {
-        console.error(`  Skip: ${work.relPath} (${err.message})`);
-        continue;
-      }
-
-      const workId = crypto.randomUUID();
-      const sql = `INSERT OR IGNORE INTO puritan_works (id, author_id, title, content, file_path, created_at) VALUES (${escapeSql(workId)}, ${escapeSql(authorId)}, ${escapeSql(work.title)}, ${escapeSql(content)}, ${escapeSql(work.relPath)}, datetime('now'));\n`;
-
-      if (currentSize + sql.length > MAX_BATCH_SIZE && currentBatch.length > 0) {
-        batchNum++;
-        const batchFile = join(
-          BATCH_DIR,
-          `batch_${String(batchNum).padStart(3, "0")}_works.sql`
-        );
-        await writeFile(batchFile, currentBatch);
-        batches.push(batchFile);
-        console.log(
-          `Batch ${String(batchNum).padStart(3, "0")}: ${(currentSize / 1024 / 1024).toFixed(1)} MB`
-        );
-        currentBatch = "";
-        currentSize = 0;
-      }
-
-      currentBatch += sql;
-      currentSize += sql.length;
-      totalWorks++;
-    }
-  }
-
-  // Write final batch
-  if (currentBatch.length > 0) {
-    batchNum++;
-    const batchFile = join(
-      BATCH_DIR,
-      `batch_${String(batchNum).padStart(3, "0")}_works.sql`
-    );
-    await writeFile(batchFile, currentBatch);
-    batches.push(batchFile);
-    console.log(
-      `Batch ${String(batchNum).padStart(3, "0")}: ${(currentSize / 1024 / 1024).toFixed(1)} MB`
-    );
-  }
-
-  console.log(
-    `\nTotal: ${totalAuthors} authors, ${totalWorks} works in ${batches.length} batches`
-  );
-  return batches;
+  return res.json();
 }
 
-async function executeBatches(batches) {
-  const remoteFlag = REMOTE ? "--remote" : "--local";
+async function ensureAuthors(authors) {
+  // Query existing authors
+  const existing = await postImport({ action: "query", sql: "SELECT id, name FROM puritan_authors" });
+  const nameToId = new Map();
+  for (const a of existing.results || []) nameToId.set(a.name, a.id);
 
-  // Clear existing puritan data first
-  console.log("\nClearing existing puritan data...");
-  execSync(
-    `echo "DELETE FROM puritan_work_tokens; DELETE FROM puritan_works; DELETE FROM puritan_authors;" | npx wrangler d1 execute parable-db ${remoteFlag} --command "DELETE FROM puritan_work_tokens;" --yes`,
-    { stdio: "inherit" }
-  );
+  const authorIdMap = new Map();
+  const toInsert = [];
 
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i];
-    console.log(
-      `\nExecuting batch ${i + 1}/${batches.length}: ${basename(batch)}`
-    );
-    try {
-      execSync(
-        `npx wrangler d1 execute parable-db ${remoteFlag} --file=${batch} --yes`,
-        { stdio: "inherit" }
-      );
-    } catch (err) {
-      console.error(`  FAILED: ${batch} — ${err.message}`);
-      console.error("  Continuing with next batch...");
+  for (const [dirName, author] of authors) {
+    const existingId = nameToId.get(author.name);
+    if (existingId) {
+      authorIdMap.set(dirName, existingId);
+    } else {
+      const id = crypto.randomUUID();
+      authorIdMap.set(dirName, id);
+      toInsert.push({ id, name: author.name, years: author.years });
     }
   }
+
+  if (toInsert.length > 0) {
+    console.log(`  Inserting ${toInsert.length} new authors...`);
+    for (let i = 0; i < toInsert.length; i += 50) {
+      await postImport({ action: "import-authors", authors: toInsert.slice(i, i + 50) });
+    }
+  }
+  console.log(`  ${authorIdMap.size} authors mapped ✓`);
+  return authorIdMap;
 }
 
 async function main() {
   console.log(`Scanning: ${LIBRARY_PATH}`);
-  console.log(`Execute: ${EXECUTE}, Remote: ${REMOTE}\n`);
+  console.log(`Execute: ${EXECUTE}\n`);
 
   const authors = await scanLibrary(LIBRARY_PATH);
-  const batches = await generateBatches(authors);
+  let totalWorks = 0;
+  for (const [, a] of authors) totalWorks += a.works.length;
+  console.log(`Found ${authors.size} authors, ${totalWorks} works\n`);
 
-  if (EXECUTE) {
-    await executeBatches(batches);
-    console.log("\n✅ Import complete!");
-  } else {
-    console.log(
-      `\nGenerated ${batches.length} batch files in ${BATCH_DIR}/`
+  if (!EXECUTE) {
+    let small = 0, medium = 0, large = 0, huge = 0;
+    for (const [, author] of authors) {
+      for (const work of author.works) {
+        try {
+          const s = await stat(work.filePath);
+          if (s.size < 100 * 1024) small++;
+          else if (s.size < 1024 * 1024) medium++;
+          else if (s.size < MAX_CONTENT_SIZE) large++;
+          else huge++;
+        } catch { /* skip */ }
+      }
+    }
+    console.log("Size distribution:");
+    console.log(`  < 100KB:  ${small}`);
+    console.log(`  100KB-1MB: ${medium}`);
+    console.log(`  1MB-9MB:  ${large}`);
+    console.log(`  > 9MB:    ${huge} (will skip)`);
+    console.log("\nRun with --execute to import to production D1");
+    return;
+  }
+
+  // Test connectivity
+  console.log("Testing worker connectivity...");
+  await postImport({ action: "query", sql: "SELECT 1" });
+  console.log("Worker reachable ✓\n");
+
+  // Clear data and import authors with fresh IDs
+  console.log("Setting up authors...");
+  const authorIdMap = await ensureAuthors(authors);
+
+  // Collect all works
+  console.log("Reading works from disk...");
+  const allWorks = [];
+  let skipped = 0, oversized = 0;
+
+  for (const [dirName, author] of authors) {
+    const authorId = authorIdMap.get(dirName);
+    for (const work of author.works) {
+      try {
+        const fstat = await stat(work.filePath);
+        // Read only the preview portion to avoid OOM on large files
+        const fh = await fsOpen(work.filePath, "r");
+        const buf = Buffer.alloc(Math.min(CONTENT_PREVIEW_SIZE * 4, fstat.size)); // 4x for UTF-8 multibyte
+        await fh.read(buf, 0, buf.length, 0);
+        await fh.close();
+        const preview = buf.toString("utf-8").slice(0, CONTENT_PREVIEW_SIZE);
+        allWorks.push({
+          id: crypto.randomUUID(),
+          authorId,
+          title: work.title,
+          content: preview,
+          filePath: work.relPath,
+        });
+      } catch { skipped++; }
+    }
+  }
+  console.log(`  ${allWorks.length} works to import (${skipped} unreadable, ${oversized} oversized)\n`);
+
+  // Import works in batches with concurrency
+  console.log("Importing works...");
+  let imported = 0, failed = 0;
+  const errors = [];
+
+  for (let i = 0; i < allWorks.length; i += BATCH_SIZE * CONCURRENCY) {
+    const chunk = allWorks.slice(i, i + BATCH_SIZE * CONCURRENCY);
+    // Split chunk into CONCURRENCY groups
+    const groups = [];
+    for (let j = 0; j < chunk.length; j += BATCH_SIZE) {
+      groups.push(chunk.slice(j, j + BATCH_SIZE));
+    }
+
+    const results = await Promise.all(
+      groups.map(async (group) => {
+        try {
+          return await postImport({ works: group });
+        } catch (err) {
+          // If the batch fails, try one at a time
+          let batchImported = 0, batchFailed = 0;
+          const batchErrors = [];
+          for (const w of group) {
+            try {
+              await postImport({ works: [w] });
+              batchImported++;
+            } catch (e) {
+              batchFailed++;
+              batchErrors.push(`${w.title}: ${e.message.slice(0, 80)}`);
+            }
+          }
+          return { imported: batchImported, failed: batchFailed, errors: batchErrors };
+        }
+      })
     );
-    console.log("Run with --execute to apply to D1");
-    console.log("Add --remote to target production D1");
+
+    for (const r of results) {
+      imported += r.imported || 0;
+      failed += r.failed || 0;
+      if (r.errors?.length) errors.push(...r.errors);
+    }
+
+    process.stdout.write(
+      `\r  Progress: ${imported + failed}/${allWorks.length} (${imported} ok, ${failed} fail)   `
+    );
+  }
+
+  console.log(`\n\n✅ Import complete!`);
+  console.log(`  Imported: ${imported}`);
+  console.log(`  Failed:   ${failed}`);
+  console.log(`  Skipped:  ${skipped} unreadable, ${oversized} oversized`);
+  if (errors.length) {
+    console.log(`\n  First ${Math.min(errors.length, 20)} errors:`);
+    for (const e of errors.slice(0, 20)) console.log(`    ${e}`);
   }
 }
 

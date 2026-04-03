@@ -45,21 +45,20 @@ puritanRoutes.post("/search", async (c) => {
     return c.json({ results: tokenResults.results, search_type: "token" });
   }
 
-  // Fallback: FTS5 full-text search
-  const ftsResults = await c.env.DB.prepare(`
+  // Fallback: LIKE search on title and content (FTS5 removed for storage efficiency)
+  const likeResults = await c.env.DB.prepare(`
     SELECT pw.id, pw.title, pw.file_path, pa.name as author_name, pa.years as author_years,
-           snippet(puritan_works_fts, 0, '<mark>', '</mark>', '...', 32) as snippet
-    FROM puritan_works_fts
-    JOIN puritan_works pw ON puritan_works_fts.rowid = pw.rowid
+           SUBSTR(pw.content, MAX(1, INSTR(LOWER(pw.content), LOWER(?)) - 50), 150) as snippet
+    FROM puritan_works pw
     JOIN puritan_authors pa ON pw.author_id = pa.id
-    WHERE puritan_works_fts MATCH ?
-    ORDER BY rank
+    WHERE pw.title LIKE ? OR pw.content LIKE ?
+    ORDER BY CASE WHEN pw.title LIKE ? THEN 0 ELSE 1 END, pw.title
     LIMIT ? OFFSET ?
   `)
-    .bind(token, limit, offset)
+    .bind(token, `%${token}%`, `%${token}%`, `%${token}%`, limit, offset)
     .all();
 
-  return c.json({ results: ftsResults.results, search_type: "fulltext" });
+  return c.json({ results: likeResults.results, search_type: "fulltext" });
 });
 
 // Get work by ID
