@@ -3,8 +3,13 @@ name = "parable-service-cloudflare"
 main = "src/index.ts"
 compatibility_date = "2025-04-01"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
 assets = { directory = "./public" }
+
+routes = [
+  { pattern = "parable.kecker.co", custom_domain = true }
+]
 
 [observability]
 enabled = true
@@ -16,4 +21,4 @@ database_id = "427dbb4b-072e-4fdd-bef5-57bb454fb39e"
 migrations_dir = "src/db/migrations"
 
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
