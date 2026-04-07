@@ -1,59 +1,21 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { env } from "cloudflare:test";
 import app from "../../src/index";
 
 describe("Stories routes", () => {
-  let env: { DB: D1Database; [key: string]: unknown };
-
   beforeEach(async () => {
-    env = getMiniflareBindings() as { DB: D1Database; [key: string]: unknown };
-    await (env.DB as D1Database).exec(`
-      CREATE TABLE IF NOT EXISTS stories (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        description TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      );
-      CREATE TABLE IF NOT EXISTS acts (
-        id TEXT PRIMARY KEY,
-        story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
-        title TEXT NOT NULL,
-        description TEXT,
-        type TEXT NOT NULL DEFAULT 'none',
-        position INTEGER NOT NULL DEFAULT 0
-      );
-      CREATE TABLE IF NOT EXISTS beats (
-        id TEXT PRIMARY KEY,
-        act_id TEXT NOT NULL REFERENCES acts(id) ON DELETE CASCADE,
-        description TEXT,
-        type TEXT NOT NULL DEFAULT 'none',
-        position INTEGER NOT NULL DEFAULT 0
-      );
-      CREATE TABLE IF NOT EXISTS characters (
-        id TEXT PRIMARY KEY,
-        story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        age INTEGER,
-        gender TEXT NOT NULL DEFAULT 'unknown',
-        build TEXT NOT NULL DEFAULT 'unknown',
-        height TEXT NOT NULL DEFAULT 'unknown',
-        temperament_major TEXT NOT NULL DEFAULT 'unknown',
-        temperament_minor TEXT NOT NULL DEFAULT 'unknown'
-      );
-      CREATE TABLE IF NOT EXISTS locations (
-        id TEXT PRIMARY KEY,
-        story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
-        title TEXT NOT NULL,
-        resemblance TEXT
-      );
-      DELETE FROM stories;
-    `);
+    await env.DB.exec(`CREATE TABLE IF NOT EXISTS stories (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+    await env.DB.exec(`CREATE TABLE IF NOT EXISTS acts (id TEXT PRIMARY KEY, story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE, title TEXT NOT NULL, description TEXT, type TEXT NOT NULL DEFAULT 'none', position INTEGER NOT NULL DEFAULT 0)`);
+    await env.DB.exec(`CREATE TABLE IF NOT EXISTS beats (id TEXT PRIMARY KEY, act_id TEXT NOT NULL REFERENCES acts(id) ON DELETE CASCADE, description TEXT, type TEXT NOT NULL DEFAULT 'none', position INTEGER NOT NULL DEFAULT 0)`);
+    await env.DB.exec(`CREATE TABLE IF NOT EXISTS characters (id TEXT PRIMARY KEY, story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE, name TEXT NOT NULL, age INTEGER, gender TEXT NOT NULL DEFAULT 'unknown', build TEXT NOT NULL DEFAULT 'unknown', height TEXT NOT NULL DEFAULT 'unknown', temperament_major TEXT NOT NULL DEFAULT 'unknown', temperament_minor TEXT NOT NULL DEFAULT 'unknown')`);
+    await env.DB.exec(`CREATE TABLE IF NOT EXISTS locations (id TEXT PRIMARY KEY, story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE, title TEXT NOT NULL, resemblance TEXT)`);
+    await env.DB.exec(`DELETE FROM stories`);
   });
 
   it("GET /api/stories returns empty list", async () => {
     const res = await app.request("/api/stories", {}, env);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { stories: unknown[] };
     expect(body.stories).toEqual([]);
   });
 
@@ -72,7 +34,7 @@ describe("Stories routes", () => {
       env
     );
     expect(res.status).toBe(201);
-    const body = await res.json();
+    const body = (await res.json()) as { id: string };
     expect(body.id).toBeDefined();
   });
 
@@ -105,11 +67,16 @@ describe("Stories routes", () => {
       },
       env
     );
-    const { id } = await createRes.json();
+    const { id } = (await createRes.json()) as { id: string };
 
     const res = await app.request(`/api/stories/${id}`, {}, env);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as {
+      title: string;
+      acts: { beats: unknown[] }[];
+      characters: unknown[];
+      locations: unknown[];
+    };
     expect(body.title).toBe("Nested Story");
     expect(body.acts).toHaveLength(1);
     expect(body.acts[0].beats).toHaveLength(1);
@@ -127,7 +94,7 @@ describe("Stories routes", () => {
       },
       env
     );
-    const { id } = await createRes.json();
+    const { id } = (await createRes.json()) as { id: string };
 
     const delRes = await app.request(
       `/api/stories/${id}`,
