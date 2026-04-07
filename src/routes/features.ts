@@ -12,6 +12,7 @@ const featureConfig: Record<
 > = {
   "puritan-search": { enabled: true, minAndroid: 6, minIos: 2 },
   authentication: { enabled: true, minAndroid: 6, minIos: 2 },
+  "cloudflare-backend": { enabled: true, minAndroid: 8, minIos: 8 },
 };
 
 function isFeatureEnabled(
