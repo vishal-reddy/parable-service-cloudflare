@@ -131,3 +131,13 @@ export const PaginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),
 });
+
+// ─── Translation Feedback Schemas ──────────────────────────────────────────
+export const TranslationFeedbackSchema = z.object({
+  language: z.string().min(2).max(10),
+  screen: z.string().max(100).optional(),
+  note: z.string().max(2000).optional(),
+  correction: z.string().max(2000).optional(),
+  platform: z.enum(["android", "ios"]).optional(),
+  app_version: z.string().max(20).optional(),
+});

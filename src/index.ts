@@ -11,6 +11,7 @@ import { assessmentsRoutes } from "./routes/assessments";
 import { weatherRoutes } from "./routes/weather";
 import { mcpRoutes } from "./routes/mcp";
 import { featuresRoutes } from "./routes/features";
+import { translationRoutes } from "./routes/translation";
 import { indexPage } from "./views/index";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -31,6 +32,7 @@ app.route("/api/puritan", puritanRoutes);
 app.route("/api/assessments", assessmentsRoutes);
 app.route("/api/weather", weatherRoutes);
 app.route("/api/features", featuresRoutes);
+app.route("/api/translations", translationRoutes);
 app.route("/", mcpRoutes);
 
 // ─── Global Error Handler ──────────────────────────────────────────────────

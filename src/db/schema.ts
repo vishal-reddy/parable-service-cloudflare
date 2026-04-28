@@ -231,3 +231,20 @@ export const weather_forecast = sqliteTable("weather_forecast", {
     .notNull()
     .default(sql`(datetime('now'))`),
 });
+
+// ─── Translation Feedback Domain ───────────────────────────────────────────
+
+export const translation_feedback = sqliteTable("translation_feedback", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  language: text("language").notNull(),
+  screen: text("screen"),
+  note: text("note"),
+  correction: text("correction"),
+  platform: text("platform"),
+  app_version: text("app_version"),
+  created_at: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
