@@ -138,6 +138,7 @@ export const TranslationFeedbackSchema = z.object({
   screen: z.string().max(100).optional(),
   note: z.string().max(2000).optional(),
   correction: z.string().max(2000).optional(),
-  platform: z.enum(["android", "ios"]).optional(),
+  platform: z.enum(["android", "ios", "web"]).optional(),
   app_version: z.string().max(20).optional(),
+  user_email: z.string().email().max(255).optional(),
 });

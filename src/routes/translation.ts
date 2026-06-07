@@ -34,6 +34,7 @@ translationRoutes.post("/feedback", async (c) => {
       correction: parsed.data.correction ?? null,
       platform: parsed.data.platform ?? null,
       app_version: parsed.data.app_version ?? null,
+      user_email: parsed.data.user_email ?? null,
     })
     .returning({ id: translation_feedback.id });
 

@@ -244,6 +244,7 @@ export const translation_feedback = sqliteTable("translation_feedback", {
   correction: text("correction"),
   platform: text("platform"),
   app_version: text("app_version"),
+  user_email: text("user_email"),
   created_at: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
