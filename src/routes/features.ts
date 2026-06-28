@@ -45,5 +45,11 @@ featuresRoutes.get("/", (c) => {
     features[key] = isFeatureEnabled(key, platform, appVersion);
   }
 
+  // Source-comparison (confession diffs) is environment-gated rather than
+  // version-gated: ON in the test environment, OFF in production. This is what
+  // lets dev/PR app builds (which talk to the test backend) show the feature
+  // while production builds (talking to prod) keep it hidden.
+  features["source-comparison"] = c.env.ENVIRONMENT === "test";
+
   return c.json({ features, timestamp: new Date().toISOString() });
 });
