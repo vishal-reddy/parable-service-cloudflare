@@ -65,7 +65,11 @@ puritanRoutes.post("/search", async (c) => {
     .all();
 
   if (tokenResults.results.length > 0) {
-    return c.json({ results: tokenResults.results, search_type: "token" });
+    return c.json({
+      results: tokenResults.results,
+      search_type: "token",
+      meta: { token, limit, offset, count: tokenResults.results.length },
+    });
   }
 
   // Fallback: LIKE search on title and content (FTS5 removed for storage efficiency)
@@ -81,7 +85,11 @@ puritanRoutes.post("/search", async (c) => {
     .bind(token, `%${token}%`, `%${token}%`, `%${token}%`, limit, offset)
     .all();
 
-  return c.json({ results: likeResults.results, search_type: "fulltext" });
+  return c.json({
+    results: likeResults.results,
+    search_type: "fulltext",
+    meta: { token, limit, offset, count: likeResults.results.length },
+  });
 });
 
 // Get work by ID
