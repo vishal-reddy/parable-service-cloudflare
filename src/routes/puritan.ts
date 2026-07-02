@@ -8,7 +8,30 @@ import type { Env } from "../types";
 
 export const puritanRoutes = new Hono<{ Bindings: Env }>();
 
-// All puritan routes require auth
+const DO_BASE = "https://parable-service-9mbah.ondigitalocean.app";
+
+// Admin: ingest one work's full markdown into R2 (registered BEFORE requireAuth,
+// gated by a migration secret instead of Kinde). The complete text is too large
+// for D1, so it's fetched from the legacy DigitalOcean service server-side and
+// stored in R2 keyed by file_path. One-off backfill; safe to keep (secret-gated,
+// only writes to our content bucket).
+puritanRoutes.post("/admin/ingest", async (c) => {
+  if (c.req.header("X-Migration-Secret") !== c.env.MIGRATION_SECRET) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+  const { file_path, do_work_id } = await c.req.json<{ file_path?: string; do_work_id?: string }>();
+  if (!file_path || !do_work_id) {
+    return c.json({ error: "file_path and do_work_id required" }, 400);
+  }
+  const res = await fetch(`${DO_BASE}/api/puritan/works/${do_work_id}`);
+  if (!res.ok) return c.json({ error: "DO fetch failed", status: res.status }, 502);
+  const work = await res.json<{ content?: string }>();
+  const content = work.content ?? "";
+  await c.env.CONTENT_BUCKET.put(file_path, content);
+  return c.json({ ok: true, file_path, bytes: content.length });
+});
+
+// All other puritan routes require auth
 puritanRoutes.use("*", requireAuth);
 
 // List all search tokens
@@ -82,7 +105,16 @@ puritanRoutes.get("/works/:id", async (c) => {
     .where(eq(puritan_authors.id, work.author_id))
     .limit(1);
 
-  return c.json({ ...work, author });
+  // Full text lives in R2 (too large for D1); the D1 `content` is only a short
+  // search snippet. Serve the complete markdown from R2 keyed by file_path,
+  // falling back to the D1 snippet if the object isn't present.
+  let content = work.content;
+  if (work.file_path) {
+    const obj = await c.env.CONTENT_BUCKET.get(work.file_path);
+    if (obj) content = await obj.text();
+  }
+
+  return c.json({ ...work, content, author });
 });
 
 // List all authors

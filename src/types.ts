@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 // ─── Env Bindings ──────────────────────────────────────────────────────────
 export interface Env {
   DB: D1Database;
+  CONTENT_BUCKET: R2Bucket;
   ENVIRONMENT: string;
   KINDE_DOMAIN: string;
   KINDE_CLIENT_ID: string;
@@ -12,6 +13,7 @@ export interface Env {
   KINDE_AUDIENCE: string;
   WEATHER_API_BASE_URL: string;
   SESSION_SECRET: string;
+  MIGRATION_SECRET: string;
 }
 
 // ─── Story Schemas ─────────────────────────────────────────────────────────
