@@ -20,6 +20,13 @@ database_name = "parable-db"
 database_id = "427dbb4b-072e-4fdd-bef5-57bb454fb39e"
 migrations_dir = "src/db/migrations"
 
+# Full Puritan work text (too large for D1 — ~12 GB). D1 keeps metadata + a short
+# snippet for search; the complete markdown lives in R2, keyed by work file_path.
+# Shared read-only bucket bound to both prod and test.
+[[r2_buckets]]
+binding = "CONTENT_BUCKET"
+bucket_name = "parable-puritan-content"
+
 [vars]
 ENVIRONMENT = "production"
 
@@ -50,3 +57,8 @@ binding = "DB"
 database_name = "parable-db-test"
 database_id = "bac45704-d6c6-4faf-87d9-5d4945bf5ccf"
 migrations_dir = "src/db/migrations"
+
+# Same shared R2 bucket as prod (Puritan content is identical read-only data).
+[[env.test.r2_buckets]]
+binding = "CONTENT_BUCKET"
+bucket_name = "parable-puritan-content"
