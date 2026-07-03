@@ -45,13 +45,19 @@ puritanRoutes.get("/tokens", async (c) => {
 puritanRoutes.post("/search", async (c) => {
   const body = await c.req.json();
   const { token } = SearchByTokenSchema.parse(body);
-  const { limit, offset } = PaginationSchema.parse(c.req.query());
+  // Pagination may arrive in the JSON body (mobile clients send { token, limit,
+  // offset }) or the query string (web). Prefer the body, fall back to the query,
+  // then the schema defaults — otherwise every page re-fetches offset 0.
+  const { limit, offset } = PaginationSchema.parse({
+    limit: body.limit ?? c.req.query("limit"),
+    offset: body.offset ?? c.req.query("offset"),
+  });
 
   const db = drizzle(c.env.DB);
 
   // First: try token-based search via junction table
   const tokenResults = await c.env.DB.prepare(`
-    SELECT pw.id, pw.title, pw.file_path, pa.name as author_name, pa.years as author_years,
+    SELECT pw.id AS work_id, pw.title, pw.file_path, pa.name AS author, pa.years AS years,
            pwt.match_count, pwt.snippet
     FROM puritan_work_tokens pwt
     JOIN puritan_works pw ON pwt.work_id = pw.id
@@ -74,8 +80,9 @@ puritanRoutes.post("/search", async (c) => {
 
   // Fallback: LIKE search on title and content (FTS5 removed for storage efficiency)
   const likeResults = await c.env.DB.prepare(`
-    SELECT pw.id, pw.title, pw.file_path, pa.name as author_name, pa.years as author_years,
-           SUBSTR(pw.content, MAX(1, INSTR(LOWER(pw.content), LOWER(?)) - 50), 150) as snippet
+    SELECT pw.id AS work_id, pw.title, pw.file_path, pa.name AS author, pa.years AS years,
+           SUBSTR(pw.content, MAX(1, INSTR(LOWER(pw.content), LOWER(?)) - 50), 150) AS snippet,
+           1 AS match_count
     FROM puritan_works pw
     JOIN puritan_authors pa ON pw.author_id = pa.id
     WHERE pw.title LIKE ? OR pw.content LIKE ?
