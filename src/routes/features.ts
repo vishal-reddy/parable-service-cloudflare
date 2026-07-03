@@ -51,5 +51,9 @@ featuresRoutes.get("/", (c) => {
   // while production builds (talking to prod) keep it hidden.
   features["source-comparison"] = c.env.ENVIRONMENT === "test";
 
+  // Puritan full-content reader + search pagination — env-gated the same way:
+  // ON in test (dev/PR app builds) so it can be validated before production.
+  features["puritan-full-reader"] = c.env.ENVIRONMENT === "test";
+
   return c.json({ features, timestamp: new Date().toISOString() });
 });
