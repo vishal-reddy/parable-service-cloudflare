@@ -29,6 +29,8 @@ bucket_name = "parable-puritan-content"
 
 [vars]
 ENVIRONMENT = "production"
+# Admin allowlist for /api/admin (trueconfessions.app/admin dashboard).
+ADMIN_EMAILS = "vlukereddy@gmail.com"
 
 # ─── Stable test environment ─────────────────────────────────────────────────
 # A separate worker (`parable-service-cloudflare-test`) at parable-test.kecker.co
@@ -48,6 +50,7 @@ routes = [
 
 [env.test.vars]
 ENVIRONMENT = "test"
+ADMIN_EMAILS = "vlukereddy@gmail.com"
 KINDE_DOMAIN = "https://kecker.kinde.com"
 KINDE_AUDIENCE = "https://parable.kecker.co"
 KINDE_CLIENT_ID = "7a1247c4fc50464b90aeb81c20cfe5fe"

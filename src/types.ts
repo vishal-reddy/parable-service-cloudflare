@@ -14,6 +14,10 @@ export interface Env {
   WEATHER_API_BASE_URL: string;
   SESSION_SECRET: string;
   MIGRATION_SECRET: string;
+  /** Comma-separated emails allowed to use /api/admin (dashboard). */
+  ADMIN_EMAILS?: string;
+  /** Comma-separated Kinde user ids allowed to use /api/admin. */
+  ADMIN_USER_IDS?: string;
 }
 
 // ─── Story Schemas ─────────────────────────────────────────────────────────

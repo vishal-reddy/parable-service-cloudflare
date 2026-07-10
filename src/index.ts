@@ -12,6 +12,7 @@ import { weatherRoutes } from "./routes/weather";
 import { mcpRoutes } from "./routes/mcp";
 import { featuresRoutes } from "./routes/features";
 import { announcementsRoutes } from "./routes/announcements";
+import { adminRoutes } from "./routes/admin";
 import { translationRoutes } from "./routes/translation";
 import { indexPage } from "./views/index";
 
@@ -34,6 +35,7 @@ app.route("/api/assessments", assessmentsRoutes);
 app.route("/api/weather", weatherRoutes);
 app.route("/api/features", featuresRoutes);
 app.route("/api/announcements", announcementsRoutes);
+app.route("/api/admin", adminRoutes);
 app.route("/api/translations", translationRoutes);
 app.route("/", mcpRoutes);
 
