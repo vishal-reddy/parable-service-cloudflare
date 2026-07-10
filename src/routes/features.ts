@@ -1,5 +1,12 @@
 import { Hono } from "hono";
 import type { Env } from "../types";
+import {
+  FEATURES_KEY,
+  UPGRADE_KEY,
+  getConfigJson,
+  type FeatureOverrides,
+  type UpgradeOverrides,
+} from "../db/appConfig";
 
 /**
  * Feature toggle configuration.
@@ -65,10 +72,32 @@ const upgradeConfig: Record<
   },
 };
 
+/**
+ * The code-default value of every feature flag for this environment (before
+ * any admin overrides), evaluated without platform/version gating — used by
+ * the admin dashboard to show what a flag falls back to.
+ */
+export function featureDefaults(env: Env): Record<string, boolean> {
+  const defaults: Record<string, boolean> = {};
+  for (const [key, feature] of Object.entries(featureConfig)) {
+    defaults[key] = feature.enabled;
+  }
+  defaults["source-comparison"] = env.ENVIRONMENT === "test";
+  defaults["puritan-full-reader"] = env.ENVIRONMENT === "test";
+  return defaults;
+}
+
+/** The code-default upgrade config for this environment. */
+export function upgradeDefaults(
+  env: Env
+): Record<string, { minVersion: number; storeUrl: string }> {
+  return upgradeConfig[env.ENVIRONMENT === "test" ? "test" : "production"];
+}
+
 export const featuresRoutes = new Hono<{ Bindings: Env }>();
 
 // GET /api/features — public, no auth required
-featuresRoutes.get("/", (c) => {
+featuresRoutes.get("/", async (c) => {
   const platform = c.req.query("platform");
   const appVersion = parseInt(c.req.query("version") ?? "1", 10) || 1;
 
@@ -87,12 +116,31 @@ featuresRoutes.get("/", (c) => {
   // ON in test (dev/PR app builds) so it can be validated before production.
   features["puritan-full-reader"] = c.env.ENVIRONMENT === "test";
 
+  // Admin-dashboard overrides (trueconfessions.app/admin) win over the code
+  // defaults above. Stored per environment in D1; absent table/rows = no-op.
+  const featureOverrides = await getConfigJson<FeatureOverrides>(
+    c.env.DB,
+    FEATURES_KEY
+  );
+  if (featureOverrides) {
+    for (const [key, value] of Object.entries(featureOverrides)) {
+      features[key] = value;
+    }
+  }
+
   // Per-platform minimum-version gate. Omitted for unknown platforms so old
   // clients (which ignore unknown JSON fields) and non-app callers are
-  // unaffected.
-  const envConfig =
-    upgradeConfig[c.env.ENVIRONMENT === "test" ? "test" : "production"];
-  const platformUpgrade = platform ? envConfig[platform] : undefined;
+  // unaffected. Admin overrides win over the code defaults.
+  const upgradeOverrides = await getConfigJson<UpgradeOverrides>(
+    c.env.DB,
+    UPGRADE_KEY
+  );
+  const envConfig = upgradeDefaults(c.env);
+  const platformUpgrade = platform
+    ? (upgradeOverrides as Record<string, { minVersion: number; storeUrl: string }> | null)?.[
+        platform
+      ] ?? envConfig[platform]
+    : undefined;
   const upgrade = platformUpgrade
     ? {
         minVersion: platformUpgrade.minVersion,
