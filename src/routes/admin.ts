@@ -32,7 +32,9 @@ adminRoutes.get("/overview", async (c) => {
     getConfigJson<UpgradeOverrides>(c.env.DB, UPGRADE_KEY),
     c.env.DB.prepare(
       `SELECT id, title, body, created_at AS createdAt
-         FROM announcements ORDER BY id DESC LIMIT 100`
+         FROM announcements
+      ORDER BY created_at DESC, id DESC
+      LIMIT 100`
     ).all(),
   ]);
 

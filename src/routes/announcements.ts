@@ -20,7 +20,7 @@ announcementsRoutes.get("/", async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT id, title, body, created_at AS createdAt
        FROM announcements
-      ORDER BY id DESC
+      ORDER BY created_at DESC, id DESC
       LIMIT 50`
   ).all();
 
