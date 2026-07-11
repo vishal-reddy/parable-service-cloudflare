@@ -77,6 +77,7 @@ adminRoutes.put("/features", async (c) => {
 const UpgradePlatformSchema = z
   .object({
     minVersion: z.number().int().min(0),
+    recommendedVersion: z.number().int().min(0).optional(),
     storeUrl: z.string().url(),
   })
   .nullable();

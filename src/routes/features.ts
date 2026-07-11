@@ -52,23 +52,36 @@ function isFeatureEnabled(
  */
 const upgradeConfig: Record<
   string,
-  Record<string, { minVersion: number; storeUrl: string }>
+  Record<
+    string,
+    { minVersion: number; recommendedVersion?: number; storeUrl: string }
+  >
 > = {
   production: {
     android: {
       minVersion: 1,
+      recommendedVersion: 1,
       storeUrl:
         "https://play.google.com/store/apps/details?id=org.irbsseminary.trueconfessions",
     },
-    ios: { minVersion: 1, storeUrl: "https://apps.apple.com/app/id6741652053" },
+    ios: {
+      minVersion: 1,
+      recommendedVersion: 1,
+      storeUrl: "https://apps.apple.com/app/id6741652053",
+    },
   },
   test: {
     android: {
       minVersion: 1,
+      recommendedVersion: 1,
       storeUrl:
         "https://play.google.com/store/apps/details?id=org.irbsseminary.trueconfessions",
     },
-    ios: { minVersion: 1, storeUrl: "https://apps.apple.com/app/id6741652053" },
+    ios: {
+      minVersion: 1,
+      recommendedVersion: 1,
+      storeUrl: "https://apps.apple.com/app/id6741652053",
+    },
   },
 };
 
@@ -90,7 +103,10 @@ export function featureDefaults(env: Env): Record<string, boolean> {
 /** The code-default upgrade config for this environment. */
 export function upgradeDefaults(
   env: Env
-): Record<string, { minVersion: number; storeUrl: string }> {
+): Record<
+  string,
+  { minVersion: number; recommendedVersion?: number; storeUrl: string }
+> {
   return upgradeConfig[env.ENVIRONMENT === "test" ? "test" : "production"];
 }
 
@@ -137,15 +153,28 @@ featuresRoutes.get("/", async (c) => {
   );
   const envConfig = upgradeDefaults(c.env);
   const platformUpgrade = platform
-    ? (upgradeOverrides as Record<string, { minVersion: number; storeUrl: string }> | null)?.[
-        platform
-      ] ?? envConfig[platform]
+    ? (upgradeOverrides as Record<
+        string,
+        { minVersion: number; recommendedVersion?: number; storeUrl: string }
+      > | null)?.[platform] ?? envConfig[platform]
+    : undefined;
+  // recommended is a soft nudge: dismissable in the apps, never blocking, and
+  // never below the hard minimum. minVersion always wins.
+  const recommendedVersion = platformUpgrade
+    ? Math.max(
+        platformUpgrade.recommendedVersion ?? platformUpgrade.minVersion,
+        platformUpgrade.minVersion
+      )
     : undefined;
   const upgrade = platformUpgrade
     ? {
         minVersion: platformUpgrade.minVersion,
+        recommendedVersion,
         storeUrl: platformUpgrade.storeUrl,
         upgradeRequired: appVersion < platformUpgrade.minVersion,
+        upgradeRecommended:
+          appVersion >= platformUpgrade.minVersion &&
+          appVersion < (recommendedVersion ?? 0),
       }
     : undefined;
 
