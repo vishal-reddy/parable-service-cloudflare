@@ -8,6 +8,8 @@ export type FeatureOverrides = Record<string, boolean>;
 
 export interface UpgradePlatformConfig {
   minVersion: number;
+  /** Soft nudge floor — dismissable prompt; clamped to >= minVersion. */
+  recommendedVersion?: number;
   storeUrl: string;
 }
 
