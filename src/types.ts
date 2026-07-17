@@ -18,6 +18,13 @@ export interface Env {
   ADMIN_EMAILS?: string;
   /** Comma-separated Kinde user ids allowed to use /api/admin. */
   ADMIN_USER_IDS?: string;
+  /** GitHub token (fine-grained PAT, Issues:write) used to open an issue per
+   *  translation-feedback submission. When unset, issue creation is a no-op. */
+  GITHUB_TOKEN?: string;
+  /** "owner/repo" that translation-feedback issues are filed against. */
+  GITHUB_ISSUES_REPO?: string;
+  /** Optional comma-separated GitHub logins to auto-assign new feedback issues. */
+  GITHUB_ISSUE_ASSIGNEES?: string;
 }
 
 // ─── Story Schemas ─────────────────────────────────────────────────────────

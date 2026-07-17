@@ -31,6 +31,10 @@ bucket_name = "parable-puritan-content"
 ENVIRONMENT = "production"
 # Admin allowlist for /api/admin (trueconfessions.app/admin dashboard).
 ADMIN_EMAILS = "vlukereddy@gmail.com"
+# Repo where translation-feedback submissions open triage issues. The GITHUB_TOKEN
+# secret (fine-grained PAT, Issues:write) enables it; set it only on prod so test/dev
+# submissions don't create real issues: `wrangler secret put GITHUB_TOKEN`.
+GITHUB_ISSUES_REPO = "KeckerCo/true-confessions-compose-multiplatform"
 
 # ─── Stable test environment ─────────────────────────────────────────────────
 # A separate worker (`parable-service-cloudflare-test`) at parable-test.kecker.co

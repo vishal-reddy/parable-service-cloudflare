@@ -5,6 +5,7 @@ import { translation_feedback } from "../db/schema";
 import { requireAuth } from "../middleware/auth";
 import { TranslationFeedbackSchema, PaginationSchema } from "../types";
 import type { Env } from "../types";
+import { createTranslationFeedbackIssue } from "../lib/github";
 
 export const translationRoutes = new Hono<{ Bindings: Env }>();
 
@@ -37,6 +38,20 @@ translationRoutes.post("/feedback", async (c) => {
       user_email: parsed.data.user_email ?? null,
     })
     .returning({ id: translation_feedback.id });
+
+  // Open a GitHub issue for triage (non-blocking: runs after the response, and
+  // never affects whether the submission succeeds — see createTranslationFeedbackIssue).
+  c.executionCtx.waitUntil(
+    createTranslationFeedbackIssue(c.env, {
+      id: row.id,
+      language: parsed.data.language,
+      screen: parsed.data.screen,
+      note: parsed.data.note,
+      correction: parsed.data.correction,
+      platform: parsed.data.platform,
+      app_version: parsed.data.app_version,
+    }),
+  );
 
   return c.json({ success: true, id: row.id }, 201);
 });
