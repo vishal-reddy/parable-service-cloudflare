@@ -141,10 +141,14 @@ export const PaginationSchema = z.object({
 // ─── Translation Feedback Schemas ──────────────────────────────────────────
 export const TranslationFeedbackSchema = z.object({
   language: z.string().min(2).max(10),
-  screen: z.string().max(100).optional(),
-  note: z.string().max(2000).optional(),
-  correction: z.string().max(2000).optional(),
-  platform: z.enum(["android", "ios", "web"]).optional(),
-  app_version: z.string().max(20).optional(),
-  user_email: z.string().email().max(255).optional(),
+  // nullish (not optional): the mobile clients serialize absent fields as explicit
+  // JSON null (e.g. user_email when the user isn't signed in). Zod's .optional()
+  // accepts undefined but REJECTS null → 422, which silently broke the "report
+  // translation" save button on iOS and Android. .nullish() accepts value|null|absent.
+  screen: z.string().max(100).nullish(),
+  note: z.string().max(2000).nullish(),
+  correction: z.string().max(2000).nullish(),
+  platform: z.enum(["android", "ios", "web"]).nullish(),
+  app_version: z.string().max(20).nullish(),
+  user_email: z.string().email().max(255).nullish(),
 });
