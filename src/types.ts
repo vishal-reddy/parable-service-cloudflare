@@ -25,6 +25,10 @@ export interface Env {
   GITHUB_ISSUES_REPO?: string;
   /** Optional comma-separated GitHub logins to auto-assign new feedback issues. */
   GITHUB_ISSUE_ASSIGNEES?: string;
+  /** Legacy-contract compatibility shaping for pinned 1.0.0 mobile clients.
+   *  "on" (default) shapes Puritan responses so the CF Worker can fully replace
+   *  the DigitalOcean backend; set "off" to serve only the CF-native shape. */
+  LEGACY_CONTRACT_COMPAT?: string;
 }
 
 // ─── Story Schemas ─────────────────────────────────────────────────────────

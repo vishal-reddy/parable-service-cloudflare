@@ -29,6 +29,10 @@ bucket_name = "parable-puritan-content"
 
 [vars]
 ENVIRONMENT = "production"
+# Legacy-contract compat shaping so pinned 1.0.0 mobile clients can be served
+# entirely from Cloudflare, letting the DigitalOcean backend + Postgres retire.
+# Set to "off" to serve only the CF-native shape. Reversible without a schema change.
+LEGACY_CONTRACT_COMPAT = "on"
 # Admin allowlist for /api/admin (trueconfessions.app/admin dashboard).
 ADMIN_EMAILS = "vlukereddy@gmail.com"
 # Repo where translation-feedback submissions open triage issues. The GITHUB_TOKEN
@@ -54,6 +58,7 @@ routes = [
 
 [env.test.vars]
 ENVIRONMENT = "test"
+LEGACY_CONTRACT_COMPAT = "on"
 ADMIN_EMAILS = "vlukereddy@gmail.com"
 KINDE_DOMAIN = "https://kecker.kinde.com"
 KINDE_AUDIENCE = "https://parable.kecker.co"
