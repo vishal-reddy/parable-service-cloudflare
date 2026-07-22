@@ -5,6 +5,13 @@ import { puritan_authors, puritan_works, search_tokens } from "../db/schema";
 import { requireAuth } from "../middleware/auth";
 import { SearchByTokenSchema, PaginationSchema } from "../types";
 import type { Env } from "../types";
+import {
+  legacyCompatEnabled,
+  legacyWorkFields,
+  scrubSourcePaths,
+  toLegacySearchResult,
+  type SearchRow,
+} from "../lib/contract-compat";
 
 export const puritanRoutes = new Hono<{ Bindings: Env }>();
 
@@ -55,6 +62,12 @@ puritanRoutes.post("/search", async (c) => {
 
   const db = drizzle(c.env.DB);
 
+  // Shape rows for the pinned 1.0.0 client (non-null snippet/author, scrubbed
+  // snippet) when legacy compat is on. Extra columns pass through untouched.
+  const compat = legacyCompatEnabled(c.env);
+  const shape = (rows: unknown[]): unknown[] =>
+    compat ? (rows as SearchRow[]).map(toLegacySearchResult) : rows;
+
   // First: try token-based search via junction table
   const tokenResults = await c.env.DB.prepare(`
     SELECT pw.id AS work_id, pw.title, pw.file_path, pa.name AS author, pa.years AS years,
@@ -72,7 +85,7 @@ puritanRoutes.post("/search", async (c) => {
 
   if (tokenResults.results.length > 0) {
     return c.json({
-      results: tokenResults.results,
+      results: shape(tokenResults.results),
       search_type: "token",
       meta: { token, limit, offset, count: tokenResults.results.length },
     });
@@ -93,7 +106,7 @@ puritanRoutes.post("/search", async (c) => {
     .all();
 
   return c.json({
-    results: likeResults.results,
+    results: shape(likeResults.results),
     search_type: "fulltext",
     meta: { token, limit, offset, count: likeResults.results.length },
   });
@@ -127,6 +140,19 @@ puritanRoutes.get("/works/:id", async (c) => {
   if (work.file_path) {
     const obj = await c.env.CONTENT_BUCKET.get(work.file_path);
     if (obj) content = await obj.text();
+  }
+
+  // Pinned 1.0.0 clients read author_name/author_id/content (the CF `author`
+  // object is an unbound unknown key they drop). Under compat, surface a
+  // flattened author_name + years and scrub stub source-path leakage from the
+  // content so it reads identically to the retiring DO backend.
+  if (legacyCompatEnabled(c.env)) {
+    return c.json({
+      ...work,
+      content: scrubSourcePaths(content),
+      author,
+      ...legacyWorkFields(author),
+    });
   }
 
   return c.json({ ...work, content, author });

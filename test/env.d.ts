@@ -11,6 +11,7 @@ declare global {
       KINDE_AUDIENCE: string;
       WEATHER_API_BASE_URL: string;
       SESSION_SECRET: string;
+      LEGACY_CONTRACT_COMPAT?: string;
     }
   }
 }
